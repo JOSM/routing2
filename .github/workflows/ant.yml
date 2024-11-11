@@ -1,0 +1,55 @@
+name: Java CI
+
+on:
+  push:
+    branches:
+      - master
+      - $default-branch
+      - $protected-branches
+  pull_request:
+    branches:
+      - master
+      - $default-branch
+  workflow_dispatch:
+
+permissions:
+  id-token: write
+  attestations: write
+  contents: write
+  packages: write
+
+jobs:
+  call-workflow:
+    strategy:
+      matrix:
+        josm-revision: ["", "r19067"]
+    uses: JOSM/JOSMPluginAction/.github/workflows/ant.yml@v3
+    with:
+      java-version: 22
+      josm-revision: ${{ matrix.josm-revision }}
+      perform-revision-tagging: ${{ matrix.josm-revision == 'r19067' && github.repository == 'JOSM/routing2' && github.ref_type == 'branch' && github.ref_name == 'master' && github.event_name != 'schedule' && github.event_name != 'pull_request' }}
+    secrets: inherit
+  build-valhalla:
+    uses: ./.github/workflows/valhalla.yaml
+  upload-valhalla:
+    runs-on: ubuntu-latest
+    needs: [build-valhalla, call-workflow]
+    if: needs.call-workflow.outputs.tag
+    env:
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - name: Get macos build
+        uses: actions/download-artifact@v4
+        with:
+          name: macOS-build-valhalla-fat
+      - run: gh release upload --repo ${{ github.repository }} ${{ needs.call-workflow.outputs.tag }} valhalla-*-Darwin.tar.gz
+      - name: Get linux build
+        uses: actions/download-artifact@v4
+        with:
+          name: Linux-build-valhalla-X64
+      - run: gh release upload --repo ${{ github.repository }} ${{ needs.call-workflow.outputs.tag }} valhalla-*-Linux.tar.gz
+      - name: Get Windows build
+        uses: actions/download-artifact@v4
+        with:
+          name: Windows-build-valhalla-X64
+      - run: gh release upload --repo ${{ github.repository }} ${{ needs.call-workflow.outputs.tag }} valhalla-*-Windows.tar.gz

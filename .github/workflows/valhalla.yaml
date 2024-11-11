@@ -1,0 +1,208 @@
+on:
+  workflow_call:
+    inputs:
+      valhalla_ref:
+        type: string
+        default: 3.5.1
+        description: The valhalla version to build
+        required: false
+      vcpkg_ref:
+        type: string
+        default: 2024.10.21
+        description: The vcpkg version to use
+        required: false
+
+jobs:
+  build_unix:
+    runs-on: ${{ matrix.os }}
+    strategy:
+      matrix:
+        os: [macos-latest, macos-13, ubuntu-22.04, windows-2019]
+    steps:
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.8'
+      - uses: actions/checkout@v4
+        with:
+          repository: valhalla/valhalla
+          ref: ${{ inputs.valhalla_ref }}
+          submodules: 'recursive'
+      - uses: actions/checkout@v4
+        with:
+          repository: microsoft/vcpkg
+          ref: 2024.10.21
+          path: vcpkg
+          submodules: 'recursive'
+      - name: Cache dependencies
+        id: dependency-cache
+        uses: actions/cache@v4
+        with:
+          path: vcpkg/downloads
+          key: valhalla-${{ inputs.valhalla_ref }}-${{ inputs.vcpkg_ref }}-vcpkg-downloads-${{ runner.os }}-${{ runner.arch }}
+      - name: Cache build
+        id: build-cache
+        uses: actions/cache@v4
+        with:
+          path: build/valhalla-${{ inputs.valhalla_ref }}-${{ runner.os == 'macos' && 'Darwin' || runner.os }}.tar.gz
+          key: ${{ runner.os }}-${{ runner.arch }}-valhalla-${{ inputs.valhalla_ref }}
+      - name: Build valhalla
+        if: steps.build-cache.outputs.cache-hit != 'true'
+        shell: bash
+        run: |
+          set -ex
+          if [ "${{ runner.os }}" == "macOS" ]; then
+            brew install automake cmake bash coreutils binutils libtool autoconf automake autoconf-archive pkg-config autoconf
+            os="osx"
+          elif [ "${{ runner.os }}" == "Linux" ]; then
+            apt-get update && apt-get install -y curl zip unzip tar npm pkg-config autoconf libtool python3 cmake git build-essential gcc g++ make
+            os="linux"
+          elif [ "${{ runner.os }}" == "Windows" ]; then
+            os="windows-static"
+            cat <<EOF > 1.patch
+          diff --git a/scripts/valhalla_build_extract b/scripts/valhalla_build_extract
+          index 236822513..0ccafabf6 100755
+          --- a/scripts/valhalla_build_extract
+          +++ b/scripts/valhalla_build_extract
+          @@ -95,7 +95,7 @@ class TileResolver:
+                           tar.addfile(tar_member, self._tar_obj.extractfile(tar_member.name))
+                       else:
+                           tar.add(str(self.path.joinpath(t)), arcname=t)
+          -                tar_member = tar.getmember(str(t))
+          +                #tar_member = tar.getmember(str(t))
+
+
+           description = "Builds a tar extract from the tiles in mjolnir.tile_dir to the path specified in mjolnir.tile_extract."
+          EOF
+            git apply 1.patch
+          fi
+          export VCPKG_ROOT=$(pwd)/vcpkg
+          ./vcpkg/bootstrap-vcpkg.sh
+          if [ "${{ runner.arch }}" == "X64" ]; then
+            echo "set(VCPKG_BUILD_TYPE release)" >> vcpkg/triplets/x64-${os}.cmake
+          else
+            if [ "${{ runner.os }}" == "macOS" ]; then brew install vcpkg; fi
+            echo "set(VCPKG_BUILD_TYPE release)" >> vcpkg/triplets/arm64-${os}.cmake
+          fi
+          npm install --ignore-scripts
+          mkdir build
+          # We don't need python bindings
+          sed -i.bak '/pybind11/d' vcpkg.json
+          # We don't need gdal (we disable compile-time support for it)
+          sed -i.bak '/gdal/d' vcpkg.json
+          export CMAKE_MAKE_PROGRAM=make && export CMAKE_CXX_COMPILER=g++ && export CMAKE_C_COMPILER=gcc
+          cmake -B build -DCMAKE_BUILD_TYPE=Release -DCMAKE_TOOLCHAIN_FILE=$PWD/vcpkg/scripts/buildsystems/vcpkg.cmake -DDENABLE_STATIC_LIBRARY_MODULES=ON -DBUILD_SHARED_LIBS=OFF -DDENABLE_GDAL=OFF -DENABLE_SERVICES=OFF -DENABLE_SINGLE_FILES_WERROR=OFF
+          if [ "${{ runner.os }}" == "Windows" ]; then cmake --build build --config Release -- //clp:ErrorsOnly //p:BuildInParallel=true //m:8
+          elif [ "${{ runner.os }}" == "macOS" ]; then cmake --build build -- -j$(sysctl -n hw.physicalcpu)
+          elif [ "${{ runner.os }}" == "Linux" ]; then cmake --build build -- -j"$(nproc)"
+          fi
+          if [ "${{ runner.os }}" == "Windows" ]; then
+            ls build
+            ls build/Release
+            pip install -U pyinstaller
+            # Create static python files
+            $(cd build && pyinstaller valhalla_build_config && pyinstaller valhalla_build_extract)
+            ls build/dist/valhalla_build_config
+            cp build/dist/valhalla_build_config/valhalla_build_config.exe build/Release
+            cp build/dist/valhalla_build_extract/valhalla_build_extract.exe build/Release
+            cp build/valhalla_build_timezones build/Release
+            cp -r build/dist/valhalla_build_config/_internal build/Release
+            cp -r build/dist/valhalla_build_extract/_internal build/Release
+            tar -cavf build/valhalla-${{ inputs.valhalla_ref }}-Windows.tar.gz -C build/Release .
+          else sudo cmake --build build -- package
+          fi
+          if [ "${{ runner.os }}" == "Linux" ]; then
+            # Strip first path component.
+            mkdir tmp
+            tar -xf build/valhalla-${{ inputs.valhalla_ref }}-Linux.tar.gz -C tmp
+            rm build/valhalla-${{ inputs.valhalla_ref }}-Linux.tar.gz
+            tar -cavf build/valhalla-${{ inputs.valhalla_ref }}-Linux.tar.gz -C tmp/valhalla-${{ inputs.valhalla_ref }}-Linux .
+          fi
+          ls build
+      - name: Debug output
+        if: failure()
+        run: |
+          git diff
+          ls build/vcpkg_installed
+          find . -iname '*-err.log' -print -exec cat {} \;
+      - name: Upload mac build
+        id: upload-mac-build
+        if: runner.os == 'macOS'
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ runner.os }}-build-valhalla-${{ runner.arch }}
+          path: |
+            build/valhalla-${{ inputs.valhalla_ref }}-Darwin.tar.gz
+      - name: Upload linux build
+        id: upload-linux-build
+        if: runner.os == 'Linux'
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ runner.os }}-build-valhalla-${{ runner.arch }}
+          path: |
+            build/valhalla-${{ inputs.valhalla_ref }}-Linux.tar.gz
+      - name: Upload Windows build
+        id: upload-windows-build
+        if: runner.os == 'Windows'
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ runner.os }}-build-valhalla-${{ runner.arch }}
+          path: |
+            build/valhalla-${{ inputs.valhalla_ref }}-Windows.tar.gz
+
+  combine_macos:
+    runs-on: macos-latest
+    needs: [build_unix]
+    steps:
+      - name: Cache build
+        id: build-cache
+        uses: actions/cache@v4
+        with:
+          path: valhalla-${{ inputs.valhalla_ref }}-Darwin.tar.gz
+          key: ${{ runner.os }}-fat-valhalla-${{ inputs.valhalla_ref }}-${{ github.workflow_sha }}
+      - name: Get macos arm build
+        if: steps.build-cache.outputs.cache-hit != 'true'
+        uses: actions/download-artifact@v4
+        with:
+          name: macOS-build-valhalla-ARM64
+      - name: Extract arm build
+        if: steps.build-cache.outputs.cache-hit != 'true'
+        run: |
+          mkdir arm64
+          tar -xf valhalla-${{ inputs.valhalla_ref }}-Darwin.tar.gz -C arm64
+          rm valhalla-${{ inputs.valhalla_ref }}-Darwin.tar.gz
+      - name: Get macos x64 build
+        if: steps.build-cache.outputs.cache-hit != 'true'
+        uses: actions/download-artifact@v4
+        with:
+          name: macOS-build-valhalla-X64
+      - name: Build fat binaries
+        if: steps.build-cache.outputs.cache-hit != 'true'
+        run: |
+          mkdir x86
+          tar -xf valhalla-${{ inputs.valhalla_ref }}-Darwin.tar.gz -C x86
+          rm valhalla-${{ inputs.valhalla_ref }}-Darwin.tar.gz
+          # Now create the fat files
+          mkdir fat
+          function makefat() {
+            echo "${1}"
+            echo "${@}"
+            file="${1#x86/}"
+            file="${file#arm64/}"
+            if [ -f "${1}" ]; then
+              mkdir -p "fat/${file%/*}"
+              # Account for platform specific resource files
+              cp "${1}" "fat/${file}"
+              lipo -create -output "fat/${file}" "x86/${file}" "arm64/${file}"
+            fi
+          }
+          export -f makefat
+          find x86 -type f -exec bash -c 'makefat "${0}"' {} \;
+          find arm64 -type f -exec bash -c 'makefat "${0}"' {} \;
+          tar -czf valhalla-${{ inputs.valhalla_ref }}-Darwin.tar.gz -C fat/valhalla-${{ inputs.valhalla_ref }}-Darwin .
+      - name: Upload mac build
+        id: upload-mac-build
+        uses: actions/upload-artifact@v4
+        with:
+          name: macOS-build-valhalla-fat
+          path: |
+            valhalla-${{ inputs.valhalla_ref }}-Darwin.tar.gz

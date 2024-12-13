@@ -12,6 +12,7 @@ import java.io.UncheckedIOException;
 import java.net.URI;
 import java.nio.file.FileVisitResult;
 import java.nio.file.Files;
+import java.nio.file.NoSuchFileException;
 import java.nio.file.Path;
 import java.nio.file.SimpleFileVisitor;
 import java.nio.file.attribute.BasicFileAttributes;
@@ -321,6 +322,11 @@ public final class ValhallaServer implements IRouter {
         if (!Files.exists(output)) {
             try (InputStream is = runCommand(getPath("valhalla_build_timezones"))) {
                 Files.copy(is, output);
+            } catch (NoSuchFileException noSuchFileException) {
+                GuiHelper.runInEDT(
+                        () -> new Notification(tr("Could not build timezones: {0}", noSuchFileException.getMessage()))
+                                .setIcon(JOptionPane.ERROR_MESSAGE).show());
+                Logging.error(noSuchFileException);
             } catch (IOException ioException) {
                 throw new UncheckedIOException(ioException);
             }

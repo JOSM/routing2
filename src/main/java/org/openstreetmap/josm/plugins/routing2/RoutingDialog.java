@@ -12,6 +12,7 @@ import java.awt.event.ActionEvent;
 import java.awt.event.FocusEvent;
 import java.awt.event.FocusListener;
 import java.awt.event.KeyEvent;
+import java.util.ArrayList;
 import java.util.Collections;
 import java.util.Objects;
 import java.util.function.Consumer;
@@ -48,7 +49,7 @@ public class RoutingDialog extends ToggleDialog {
     public RoutingDialog() {
         super(tr("Routing"), "routing", tr("Generate routes between points"), Shortcut
                 .registerShortcut("routing:dialog", tr("Routing Dialog"), KeyEvent.CHAR_UNDEFINED, Shortcut.NONE), 200,
-                false, null, false);
+                false, RoutingPreferences.class, false);
         build();
     }
 
@@ -63,6 +64,8 @@ public class RoutingDialog extends ToggleDialog {
                 false, false) {
             @Override
             public void actionPerformed(ActionEvent e) {
+                new ArrayList<>(MainApplication.getLayerManager().getLayersOfType(RoutingLayer.class))
+                        .forEach(MainApplication.getLayerManager()::removeLayer);
                 final RoutingLayer layer = new RoutingLayer("Route", LatLonParser.parse(start.getText()),
                         LatLonParser.parse(end.getText()));
                 layer.addTripListener(instructions);

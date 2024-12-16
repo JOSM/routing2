@@ -16,6 +16,7 @@ import java.nio.file.NoSuchFileException;
 import java.nio.file.Path;
 import java.nio.file.SimpleFileVisitor;
 import java.nio.file.attribute.BasicFileAttributes;
+import java.util.Locale;
 import java.util.Objects;
 import java.util.Optional;
 import java.util.concurrent.ForkJoinPool;
@@ -29,6 +30,7 @@ import org.apache.commons.compress.archivers.tar.TarArchiveEntry;
 import org.apache.commons.compress.archivers.tar.TarArchiveInputStream;
 import org.apache.commons.io.file.Counters;
 import org.apache.commons.io.file.DeletingPathVisitor;
+import org.openstreetmap.josm.data.SystemOfMeasurement;
 import org.openstreetmap.josm.data.coor.ILatLon;
 import org.openstreetmap.josm.gui.Notification;
 import org.openstreetmap.josm.gui.layer.OsmDataLayer;
@@ -60,7 +62,7 @@ import org.openstreetmap.josm.tools.PlatformManager;
 /**
  * Make calls to a local install of Valhalla
  */
-public final class ValhallaServer implements IRouter {
+public final class ValhallaServer implements IRouter<ValhallaConfig> {
     private static final String valhallaVersion = "3.5.1";
 
     @Override
@@ -150,7 +152,38 @@ public final class ValhallaServer implements IRouter {
     }
 
     @Override
-    public Trip generateRoute(OsmDataLayer layer, ILatLon... locations) {
+    public JsonObject generateDefaultTripConfig(ValhallaConfig config) {
+        JsonObjectBuilder builder = Json.createObjectBuilder();
+        builder.add("costing", switch (config.transportationType()) {
+        case AUTO -> "auto";
+        case BUS -> "bus";
+        case TAXI -> "taxi";
+        case TRUCK -> "truck";
+        case BICYCLE -> "bicycle";
+        case MOTORCYCLE -> "motorcycle";
+        case MULTIMODEL -> "multimodal";
+        case PEDESTRIAN -> "pedestrian";
+        case BIKE_SHARE -> "bikeshare";
+        case MOTOR_SCOOTER -> "motor_scooter";
+        });
+        final SystemOfMeasurement som;
+        if (config.systemOfMeasurement() != null) {
+            som = config.systemOfMeasurement();
+        } else {
+            som = SystemOfMeasurement.getSystemOfMeasurement();
+        }
+        if ("mph".equals(som.speedName)) {
+            builder.add("directions_options", Json.createObjectBuilder().add("units", "miles")
+                    .add("language", Locale.getDefault().getLanguage()).add("alternates", config.alternates()));
+        } else {// else default to km
+            builder.add("directions_options", Json.createObjectBuilder()
+                    .add("language", Locale.getDefault().getLanguage()).add("alternates", config.alternates()));
+        }
+        return builder.build();
+    }
+
+    @Override
+    public Trip generateRoute(OsmDataLayer layer, JsonObject tripConfig, ILatLon... locations) {
         final Path config = generateConfig();
         final Path dataPath = writeDataSet(layer);
         try {
@@ -168,8 +201,7 @@ public final class ValhallaServer implements IRouter {
         generateAdmins(config, dataPath);
         generateTiles(config, dataPath);
         generateExtract(config);
-        JsonObjectBuilder builder = Json.createObjectBuilder();
-        builder.add("costing", "auto").add("directions_options", Json.createObjectBuilder().add("units", "miles"));
+        JsonObjectBuilder builder = Json.createObjectBuilder(tripConfig);
         JsonArrayBuilder locationsArray = Json.createArrayBuilder();
         for (ILatLon location : locations) {
             locationsArray.add(Json.createObjectBuilder().add("lat", location.lat()).add("lon", location.lon()));

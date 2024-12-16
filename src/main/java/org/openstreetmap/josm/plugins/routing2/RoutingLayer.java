@@ -31,6 +31,7 @@ import org.openstreetmap.josm.plugins.routing2.lib.generic.Locations;
 import org.openstreetmap.josm.plugins.routing2.lib.generic.Maneuver;
 import org.openstreetmap.josm.plugins.routing2.lib.generic.SetupException;
 import org.openstreetmap.josm.plugins.routing2.lib.generic.Trip;
+import org.openstreetmap.josm.plugins.routing2.lib.valhalla.ValhallaConfig;
 import org.openstreetmap.josm.plugins.routing2.lib.valhalla.ValhallaServer;
 import org.openstreetmap.josm.tools.JosmRuntimeException;
 import org.openstreetmap.josm.tools.ListenerList;
@@ -242,6 +243,8 @@ public class RoutingLayer extends Layer implements UndoRedoHandler.CommandQueueL
             }
             if (!monitor.isCanceled()) {
                 this.setTrip(valhallaServer.generateRoute(MainApplication.getLayerManager().getActiveDataLayer(),
+                        valhallaServer.generateDefaultTripConfig(
+                                PreferenceHelper.readRecord("routing2.valhalla.config", ValhallaConfig.DEFAULT)),
                         this.start, this.end));
             }
         });

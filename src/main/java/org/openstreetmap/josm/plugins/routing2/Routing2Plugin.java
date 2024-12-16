@@ -6,6 +6,7 @@ import java.util.List;
 
 import org.openstreetmap.josm.gui.MainApplication;
 import org.openstreetmap.josm.gui.MapFrame;
+import org.openstreetmap.josm.gui.preferences.PreferenceSetting;
 import org.openstreetmap.josm.plugins.Plugin;
 import org.openstreetmap.josm.plugins.PluginInformation;
 import org.openstreetmap.josm.tools.Destroyable;
@@ -39,6 +40,11 @@ public class Routing2Plugin extends Plugin implements Destroyable {
         if (MainApplication.getMap() != null) {
             MainApplication.getMap().removeToggleDialog(MainApplication.getMap().getToggleDialog(RoutingDialog.class));
         }
+    }
+
+    @Override
+    public PreferenceSetting getPreferenceSetting() {
+        return new RoutingPreferences();
     }
 
     /**

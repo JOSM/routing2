@@ -23,7 +23,7 @@
         <plugin.author>Taylor Smock</plugin.author>
         <plugin.class>org.openstreetmap.josm.plugins.routing2.Routing2Plugin</plugin.class>
         <plugin.description>Production-ready routing with valhalla</plugin.description>
-        <plugin.link>https://github.com/tsmock/routing2</plugin.link>
+        <plugin.link>https://github.com/JOSM/routing2</plugin.link>
         <plugin.resources.dir>src/main/resources</plugin.resources.dir>
         <plugin.requires>apache-commons;pbf</plugin.requires>
         <plugin.canloadatruntime>true</plugin.canloadatruntime>

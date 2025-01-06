@@ -10,7 +10,7 @@
   <property name="plugin.class" value="org.openstreetmap.josm.plugins.routing2.Routing2Plugin"/>
   <property name="plugin.description" value="Production-ready routing with valhalla"/>
   <property name="plugin.requires" value="apache-commons;pbf" />
-  <property name="plugin.link" value="https://github.com/tsmock/routing2"/>
+  <property name="plugin.link" value="https://github.com/JOSM/routing2"/>
   <property name="plugin.canloadatruntime" value="true" />
   <property name="plugin.minimum.java.version" value="21"/>
 

@@ -298,7 +298,7 @@ public final class ValhallaServer implements IRouter<ValhallaConfig> {
             if (response.getResponseCode() != 200) {
                 Logging.error(response.fetchContent());
                 throw new IllegalStateException("Valhalla server download location returned HTTP error code "
-                        + response.getResponseCode() + ": " + response.getResponseMessage());
+                        + response.getResponseCode() + ": " + response.getResponseMessage() + '\n' + downloadLocation);
             }
             updateable.setTicks(0);
             try (InputStream is = response.getContent();

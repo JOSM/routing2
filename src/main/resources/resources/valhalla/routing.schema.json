@@ -1,0 +1,67 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/JOSM/routing2/src/main/resources/valhalla/routing.schema.json",
+  "title": "Valhalla Routing",
+  "description": "Routing request schema",
+  "$defs": {
+    "road_type": {"enum": ["motorway", "trunk", "primary", "secondary", "tertiary", "unclassified", "residential", "service_other"]}
+  },
+  "type": "object",
+  "properties": {
+    "locations": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "lat": {"type": "number", "minimum": -90, "maximum": 90},
+          "lon": {"type": "number", "minimum": -180, "maximum": 180},
+          "type": {"enum": ["break", "through", "via", "break_through"]},
+          "heading": {"type": "number"},
+          "heading_tolerance": {"type": "number", "default": 60},
+          "street": {"type": "string"},
+          "way_id": {"type": "integer"},
+          "minimum_reachability": {"type": "integer", "default": 50},
+          "radius": {"type": "number", "default": 0},
+          "rank_candidates": {"type": "boolean"},
+          "preferred_side": {"enum": ["same", "opposite", "either"]},
+          "display_lat": {"type": "number", "minimum": -90, "maximum": 90},
+          "display_lon": {"type": "number", "minimum": -180, "maximum": 180},
+          "search_cutoff": {"type": "number", "default": 35},
+          "node_snap_distance": {"type": "number", "default": 5},
+          "street_side_tolerance": {"type": "number", "default": 5},
+          "street_side_max_distance": {"type": "number", "default": 1000},
+          "street_side_cutoff": {"$ref": "#/$defs/road_type", "default": "service_other"},
+          "search_filter": {
+            "type": "object",
+            "properties": {
+              "exclude_tunnel": {"type": "boolean", "default": false},
+              "exclude_bridge": {"type": "boolean", "default": false},
+              "exclude_toll": {"type": "boolean", "default": false},
+              "exclude_ferry": {"type": "boolean", "default": false},
+              "exclude_ramp": {"type": "boolean", "default": false},
+              "exclude_closures": {"type": "boolean", "default": true},
+              "min_road_class": {"$ref": "#/$defs/road_type", "default": "service_other"},
+              "max_road_class": {"$ref": "#/$defs/road_type", "default": "motorway"},
+              "level": {"type": "number"}
+            }
+          },
+          "preferred_layer": {"type": "integer"},
+          "name": {"type": "string"},
+          "city": {"type": "string"},
+          "state": {"type": "string"},
+          "postal_code": {"type": "string"},
+          "country": {"type": "string"},
+          "phone": {"type": "string"},
+          "url": {"type": "string", "format": "uri"},
+          "waiting": {"type": "integer"},
+          "side_of_street": {"enum": ["left", "right"]},
+          "date_time": {"type": "string", "format": "date-time"}
+        },
+        "required": ["lat", "lon", "type"]
+      }
+    },
+    "costing": {"enum": ["auto", "bicycle", "bus", "bikeshare", "truck", "taxi", "motor_scooter", "motorcycle", "multimodal", "pedestrian"]},
+    "costing_options": {"$comment": "FIXME: Add costing options"}
+  }
+}
+

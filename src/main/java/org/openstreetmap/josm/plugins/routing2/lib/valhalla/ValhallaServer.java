@@ -220,11 +220,7 @@ public final class ValhallaServer implements IRouter<ValhallaConfig> {
         } catch (IOException e) {
             throw new UncheckedIOException(e);
         }
-        try (BufferedReader errors = p.errorReader()) {
-            errors.lines().forEach(Logging::error);
-        } catch (IOException e) {
-            throw new UncheckedIOException(e);
-        }
+        logErrors(p);
         final JsonObject data;
         try (BufferedReader br = new BufferedReader(p.inputReader())) {
             br.mark(40);
@@ -470,6 +466,11 @@ public final class ValhallaServer implements IRouter<ValhallaConfig> {
                 throw new JosmRuntimeException(interruptedException);
             }
         }
+        logErrors(p);
+        return p.getInputStream();
+    }
+
+    private static void logErrors(Process p) {
         // Do not block here.
         ForkJoinPool.commonPool().submit(() -> {
             try (BufferedReader errors = p.errorReader()) {
@@ -478,6 +479,5 @@ public final class ValhallaServer implements IRouter<ValhallaConfig> {
                 throw new UncheckedIOException(e);
             }
         });
-        return p.getInputStream();
     }
 }

@@ -238,12 +238,17 @@ public final class ValhallaServer implements IRouter<ValhallaConfig> {
         }
         // check if error
         if (data.containsKey("status_code") && 200 != data.getInt("status_code")) {
-            if (data.getInt("error_code") == 442) {
-                GuiHelper.runInEDTAndWait(
-                        () -> new Notification(tr("No route found")).setIcon(JOptionPane.WARNING_MESSAGE).show());
-                return null; // No route found // FIXME: Throw RouteException with message?
-            } // FIXME: Look through https://valhalla.github.io/valhalla/api/turn-by-turn/api-reference/#http-status-codes-and-conditions for other "valid" problems.
-            throw new JosmRuntimeException(data.toString());
+            final int errorCode = data.getInt("error_code");
+            final String error = data.getString("error", "");
+            // FIXME: Look through https://valhalla.github.io/valhalla/api/turn-by-turn/api-reference/#http-status-codes-and-conditions for other "valid" problems.
+            switch (errorCode) {
+            // 171: No suitable edges near location
+            // 442: No path could be found for input
+            case 171, 442 -> GuiHelper.runInEDTAndWait(() -> new Notification(tr("No route found\n{0}", error))
+                    .setIcon(JOptionPane.WARNING_MESSAGE).show());
+            default -> throw new JosmRuntimeException(data.toString());
+            }
+            return null; // No route found // FIXME: Throw RouteException with message?
         }
         final JsonObject trip = data.getJsonObject("trip");
         final Locations[] locations1 = trip.getJsonArray("locations").stream().map(ValhallaServer::parseLocation)

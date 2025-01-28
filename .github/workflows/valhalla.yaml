@@ -206,3 +206,40 @@ jobs:
           name: macOS-build-valhalla-fat
           path: |
             valhalla-${{ inputs.valhalla_ref }}-Darwin.tar.gz
+
+  generate_timezones_admins:
+    runs-on: ubuntu-latest
+    needs: [build_unix]
+    steps:
+      - name: Cache files
+        id: build-cache
+        uses: actions/cache@v4
+        with:
+          path: |
+            timezones.sqlite
+          key: ${{ runner.os }}-valhalla-${{ inputs.valhalla_ref }}-timezones-admins
+      - name: Get Linux binaries
+        uses: actions/download-artifact@v4
+        with:
+          name: ${{ runner.os }}-build-valhalla-${{ runner.arch }}
+      - name: Extract linux binaries and build timezones and admin areas
+        run: |
+          tar xf build/valhalla-${{ inputs.valhalla_ref }}-Linux.tar.gz
+          export PATH="$(pwd)/bin:${PATH}"
+          ls bin
+          valhalla_build_config --mjolnir-tile-dir ${PWD}/valhalla_tiles --mjolnir-tile-extract ${PWD}/valhalla_tiles.tar --mjolnir-timezone ${PWD}/valhalla_tiles/timezones.sqlite --mjolnir-admin ${PWD}/valhalla_tiles/admins.sqlite > valhalla.json
+          if [ ! -f timezones.sqlite ]; then valhalla_build_timezones > valhalla_tiles/timezones.sqlite; fi
+          # FIXME: Download admins
+          apt-get update && apt-get install -y curl osmium-tool
+          curl 'https://overpass-api.de/api/interpreter' --compressed -X POST -H 'User-Agent: GitHub ${{ github.action_repository }}@${{ github.action_ref }}' \
+            -H 'Content-Type: application/x-www-form-urlencoded; charset=UTF-8' --data-raw '[out:xml][timeout:300];nwr[boundary=administrative][admin_level=2];(._;>;);out meta;' | osmium cat --input-format=osm --output-format=osm -o planet.osm.pbf
+          
+          valhalla_build_admins -c valhalla.json planet-admins.osm.pbf
+      - name: Upload timezones and admins
+        id: upload-valhalla-timezones-admins
+        uses: actions/upload-artifact@v4
+        with:
+          name: valhalla-timezones-admins
+          path: |
+            valhalla_tiles/timezones.sqlite
+            valhalla_tiles/admins.sqlite
